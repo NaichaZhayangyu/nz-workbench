@@ -102,7 +102,7 @@ function renderCalendar(){
   for(let i=1;i<=trail;i++) html+=`<div class="cal-cell other"><div class="dnum">${i}</div></div>`;
   $('#calGrid').innerHTML=html;
   $$('#calGrid .cal-cell[data-key]').forEach(c=>{
-    c.onclick=()=>{selKey=c.dataset.key;renderSlots(selKey);};
+    c.onclick=()=>{selKey=c.dataset.key;editingKey=null;renderSlots(selKey);};
   });
   if(selKey) renderSlots(selKey);
 }
@@ -110,21 +110,52 @@ $('#prevM').onclick=()=>{viewM--;if(viewM<0){viewM=11;viewY--;}renderCalendar();
 $('#nextM').onclick=()=>{viewM++;if(viewM>11){viewM=0;viewY++;}renderCalendar();};
 $('#todayM').onclick=()=>{const t=now();viewY=t.getFullYear();viewM=t.getMonth();renderCalendar();};
 
+let editingKey=null;  // 当前是否处于排班编辑模式
 function renderSlots(key){
   const [Y,M,D]=key.split('-').map(Number);
-  $('#selDateTitle').textContent=`${Y}年${M}月${D}日 · 排班详情`;
   const day=sched[key]||{};
-  let html='';
-  for(let h=0;h<24;h++){
-    const rec=day[h];
-    html+=`<div class="slot ${rec?'has':'empty'}" data-h="${h}">
-      <span class="t">${hourLabel(h)}</span>
-      <span class="p">${rec?rec.p:'空闲'}</span></div>`;
+  const hours=Object.keys(day).map(Number).sort((a,b)=>a-b);
+  // 标题
+  $('#selDateTitle').innerHTML=`${Y}年${M}月${D}日 · <span style="color:var(--gold-deep)">${hours.length?hours.length+'个班次':'暂无班次'}</span>`;
+  const wrap=$('#slotList');
+  // 编辑模式：显示24小时网格
+  if(editingKey===key){
+    let html=`<div class="edit-bar"><button class="btn ghost sm" id="cancelEdit">完成</button><span style="font-size:12.5px;color:var(--ink-soft)">点时段选择项目组</span></div>`;
+    for(let h=0;h<24;h++){
+      const rec=day[h];
+      html+=`<div class="slot ${rec?'has':'empty'}" data-h="${h}">
+        <span class="t">${hourLabel(h)}</span>
+        <span class="p">${rec?rec.p:'点此排班'}</span></div>`;
+    }
+    wrap.innerHTML=html;
+    $('#cancelEdit').onclick=()=>{editingKey=null;renderSlots(key);};
+    $$('#slotList .slot').forEach(s=>{
+      s.onclick=()=>openShiftModal(key,s.dataset.h);
+    });
+    return;
   }
-  $('#slotList').innerHTML=html;
-  $$('#slotList .slot').forEach(s=>{
-    s.onclick=()=>openShiftModal(key,s.dataset.h);
+  // 查看模式：只显示有班次的记录
+  if(hours.length===0){
+    wrap.innerHTML=`<div class="empty-tip">这一天还没排班<br><button class="btn gold sm" id="toEdit" style="margin-top:14px;">＋ 排班</button></div>`;
+    $('#toEdit').onclick=()=>{editingKey=key;renderSlots(key);};
+    return;
+  }
+  let html='';
+  hours.forEach(h=>{
+    const rec=day[h];
+    html+=`<div class="slot has" data-h="${h}" style="cursor:default;">
+      <span class="t">${hourLabel(h)}</span>
+      <span class="p">${rec.p}</span>
+      <span class="del-shift" data-h="${h}" title="删除">✕</span></div>`;
   });
+  html+=`<div style="margin-top:14px;"><button class="btn ghost sm" id="toEdit2">＋ 排班</button></div>`;
+  wrap.innerHTML=html;
+  $$('#slotList .del-shift').forEach(b=>b.onclick=()=>{
+    const h=Number(b.dataset.h);
+    if(sched[key]&&sched[key][h]){delete sched[key][h];if(!Object.keys(sched[key]).length)delete sched[key];saveSched();}
+    renderCalendar();renderSlots(key);toast('已删除该班次');
+  });
+  $('#toEdit2').onclick=()=>{editingKey=key;renderSlots(key);};
 }
 
 function openShiftModal(key,h){
