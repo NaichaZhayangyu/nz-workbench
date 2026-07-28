@@ -150,7 +150,9 @@
   .cal-cell .mini{font-size:9.5px;line-height:1.25;color:var(--p-purple-600);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;}
   .cal-cell .mini .chip{display:inline-block;background:var(--p-purple-100);border-radius:6px;padding:1px 5px;margin:1px 2px 0 0;}
   .sched-detail{margin-top:18px;}
-  .sched-detail h4{color:var(--p-purple-600);margin:0 0 10px;font-size:15px;}
+  .sched-detail h4{color:var(--p-purple-600);margin:0;font-size:15px;}
+  .sched-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;}
+  .sched-head h4{flex:1;min-width:0;}
   .slot-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
   .slot{border:1px solid var(--line);border-radius:11px;padding:9px 11px;display:flex;justify-content:space-between;align-items:center;background:#fffdfe;cursor:pointer;transition:.16s;}
   .slot:hover{border-color:var(--p-purple-300);background:var(--p-purple-50);}
@@ -229,6 +231,19 @@
   .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:linear-gradient(120deg,var(--p-purple-600),var(--gold-deep));color:#fff;padding:12px 22px;border-radius:30px;font-weight:700;font-size:14px;box-shadow:var(--shadow);opacity:0;transition:.3s;z-index:200;pointer-events:none;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+  /* ===== 强提醒全屏弹窗 ===== */
+  .alarm-alert{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,rgba(125,74,174,.92),rgba(169,134,47,.92));backdrop-filter:blur(4px);padding:24px;}
+  .alarm-alert.show{display:flex;animation:fade .3s;}
+  .alarm-alert .box{background:#fffdfe;border-radius:26px;box-shadow:0 20px 60px rgba(0,0,0,.35);width:100%;max-width:380px;padding:34px 26px;text-align:center;animation:pop .4s ease;}
+  .alarm-alert .bell{font-size:54px;animation:bell .9s ease-in-out infinite;}
+  @keyframes bell{0%,100%{transform:rotate(0);}20%{transform:rotate(14deg);}40%{transform:rotate(-12deg);}60%{transform:rotate(8deg);}80%{transform:rotate(-4deg);}}
+  .alarm-alert .a-title{font-size:22px;font-weight:900;background:linear-gradient(90deg,var(--p-purple-600),var(--gold-deep));-webkit-background-clip:text;background-clip:text;color:transparent;margin:10px 0 6px;}
+  .alarm-alert .a-msg{font-size:15px;color:var(--ink);line-height:1.7;font-weight:600;margin-bottom:8px;}
+  .alarm-alert .a-sub{font-size:12.5px;color:var(--ink-soft);margin-bottom:20px;}
+  .alarm-alert .a-close{width:100%;font-size:16px;padding:14px;border-radius:16px;}
+  .alarm-alert .a-snooze{margin-top:10px;width:100%;font-size:13px;padding:11px;border-radius:14px;background:var(--p-purple-50);color:var(--p-purple-600);border:1px solid var(--line);cursor:pointer;font-weight:700;}
+
   .alarm-dot{position:fixed;top:14px;right:18px;z-index:120;background:linear-gradient(120deg,var(--p-purple-500),var(--gold));color:#fff;border-radius:14px;padding:9px 15px;font-size:13px;font-weight:700;box-shadow:var(--shadow);display:none;cursor:pointer;max-width:320px;}
   .alarm-dot.show{display:block;animation:ring 1s ease infinite;}
   @keyframes ring{0%,100%{transform:translateX(0);}25%{transform:translateX(-4px);}75%{transform:translateX(4px);}}
@@ -298,7 +313,10 @@
         <div class="cal-grid" id="calGrid"></div>
       </div>
       <div class="card sched-detail">
-        <h4 id="selDateTitle">— 排班详情</h4>
+        <div class="sched-head">
+          <h4 id="selDateTitle">— 排班详情</h4>
+          <button class="btn gold sm" id="selEditBtn">＋ 排班</button>
+        </div>
         <div class="slot-list" id="slotList"></div>
       </div>
     </section>
@@ -400,6 +418,16 @@
 </div>
 
 <div class="alarm-dot" id="alarmDot"></div>
+<div class="alarm-alert" id="alarmAlert">
+  <div class="box">
+    <div class="bell">⏰</div>
+    <div class="a-title">上班提醒</div>
+    <div class="a-msg" id="alarmMsg"></div>
+    <div class="a-sub">距离上班还有 15 分钟，该准备了～</div>
+    <button class="btn a-close" id="alarmClose">我知道了</button>
+    <button class="a-snooze" id="alarmSnooze">5 分钟后再提醒</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <!-- ===== 通用弹窗 ===== -->

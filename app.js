@@ -115,29 +115,37 @@ function renderSlots(key){
   const [Y,M,D]=key.split('-').map(Number);
   const day=sched[key]||{};
   const hours=Object.keys(day).map(Number).sort((a,b)=>a-b);
-  // 标题
+  // 标题（排班按钮固定在标题右边，始终可见）
   $('#selDateTitle').innerHTML=`${Y}年${M}月${D}日 · <span style="color:var(--gold-deep)">${hours.length?hours.length+'个班次':'暂无班次'}</span>`;
+  $('#selEditBtn').textContent = editingKey===key ? '完成排班' : '＋ 排班';
+  $('#selEditBtn').onclick=()=>{
+    if(editingKey===key){editingKey=null;}
+    else{editingKey=key;}
+    renderSlots(key);
+  };
   const wrap=$('#slotList');
   // 编辑模式：显示24小时网格
   if(editingKey===key){
-    let html=`<div class="edit-bar"><button class="btn ghost sm" id="cancelEdit">完成</button><span style="font-size:12.5px;color:var(--ink-soft)">点时段选择项目组</span></div>`;
+    let html=`<div class="edit-bar"><span style="font-size:12.5px;color:var(--ink-soft)">点时段选择项目组 · 已排的时段点 ✕ 可删除</span></div>`;
     for(let h=0;h<24;h++){
       const rec=day[h];
       html+=`<div class="slot ${rec?'has':'empty'}" data-h="${h}">
         <span class="t">${hourLabel(h)}</span>
-        <span class="p">${rec?rec.p:'点此排班'}</span></div>`;
+        <span class="p">${rec?rec.p:'点此排班'}</span>
+        ${rec?`<span class="del-shift" data-h="${h}" title="删除">✕</span>`:''}</div>`;
     }
     wrap.innerHTML=html;
-    $('#cancelEdit').onclick=()=>{editingKey=null;renderSlots(key);};
     $$('#slotList .slot').forEach(s=>{
-      s.onclick=()=>openShiftModal(key,s.dataset.h);
+      const h=Number(s.dataset.h);
+      const del=s.querySelector('.del-shift');
+      if(del) del.onclick=(e)=>{e.stopPropagation();deleteShift(key,h);};
+      else s.onclick=()=>openShiftModal(key,h);
     });
     return;
   }
   // 查看模式：只显示有班次的记录
   if(hours.length===0){
-    wrap.innerHTML=`<div class="empty-tip">这一天还没排班<br><button class="btn gold sm" id="toEdit" style="margin-top:14px;">＋ 排班</button></div>`;
-    $('#toEdit').onclick=()=>{editingKey=key;renderSlots(key);};
+    wrap.innerHTML=`<div class="empty-tip">这一天还没排班<br><span style="font-size:13px;">点右上角「＋ 排班」开始安排</span></div>`;
     return;
   }
   let html='';
@@ -146,16 +154,26 @@ function renderSlots(key){
     html+=`<div class="slot has" data-h="${h}" style="cursor:default;">
       <span class="t">${hourLabel(h)}</span>
       <span class="p">${rec.p}</span>
-      <span class="del-shift" data-h="${h}" title="删除">✕</span></div>`;
+      <span class="del-shift" data-h="${h}" title="删除（如请假）">✕</span></div>`;
   });
-  html+=`<div style="margin-top:14px;"><button class="btn ghost sm" id="toEdit2">＋ 排班</button></div>`;
   wrap.innerHTML=html;
   $$('#slotList .del-shift').forEach(b=>b.onclick=()=>{
-    const h=Number(b.dataset.h);
-    if(sched[key]&&sched[key][h]){delete sched[key][h];if(!Object.keys(sched[key]).length)delete sched[key];saveSched();}
-    renderCalendar();renderSlots(key);toast('已删除该班次');
+    deleteShift(key,Number(b.dataset.h));
   });
-  $('#toEdit2').onclick=()=>{editingKey=key;renderSlots(key);};
+}
+// 删除某天某时段班次（请假等场景）
+function deleteShift(key,h){
+  if(sched[key]&&sched[key][h]){
+    const proj=sched[key][h].p;
+    delete sched[key][h];
+    if(!Object.keys(sched[key]).length)delete sched[key];
+    saveSched();
+    // 同步删除对应闹钟
+    const [Y,M,D]=key.split('-').map(Number);
+    const aid=Y+'-'+M+'-'+D+'-'+h;
+    alarms=alarms.filter(a=>a.id!==aid);saveAlarms();
+    renderCalendar();renderSlots(key);toast('已删除「'+hourLabel(h)+' '+proj+'」班次');
+  }
 }
 
 function openShiftModal(key,h){
@@ -182,21 +200,22 @@ function openShiftModal(key,h){
   };
   const del=$('#delShift');
   if(del) del.onclick=()=>{
-    if(sched[key]&&sched[key][h]){delete sched[key][h];if(!Object.keys(sched[key]).length)delete sched[key];saveSched();}
-    closeModal();renderCalendar();renderSlots(key);toast('已删除该班次');
+    deleteShift(key,h);
+    closeModal();renderCalendar();renderSlots(key);
   };
 }
 
-/* ===== 闹钟（本地通知） ===== */
+/* ===== 闹钟（强提醒：循环响铃 + 全屏弹窗） ===== */
 const ALARM_KEY='alarms_v1';
 let alarms=DB.get(ALARM_KEY,[]); // {id, at(ts), title}
+let ringTimer=null, ringCtx=null;
 function saveAlarms(){DB.set(ALARM_KEY,alarms);}
 function setAlarm(Y,M,D,h,proj){
   const shift=new Date(Y,M-1,D,h,0,0).getTime();
   const at=shift-15*60*1000;
   const id=Y+'-'+M+'-'+D+'-'+h;
   alarms=alarms.filter(a=>a.id!==id);
-  alarms.push({id,at,title:`⏰ ${hourLabel(h)}「${proj}」即将开始，提前15分钟提醒`});
+  alarms.push({id,at,title:`${hourLabel(h)}「${proj}」即将开始`});
   saveAlarms();
 }
 function alarmLoop(){
@@ -212,34 +231,70 @@ function alarmLoop(){
   });
   if(fired)saveAlarms();
 }
+// 循环响铃：每 1.2 秒"叮咚——叮咚"，直到关闭
+function startRing(){
+  stopRing();
+  const beep=()=>{
+    try{
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC)return;
+      ringCtx=new AC();
+      // 两声"叮咚"
+      [0,0.35].forEach((off,i)=>{
+        const o=ringCtx.createOscillator(),g=ringCtx.createGain();
+        o.connect(g);g.connect(ringCtx.destination);
+        o.type='sine';
+        o.frequency.value=i===0?988:1319; // B5 / E6 清亮铃声
+        const st=ringCtx.currentTime+off;
+        g.gain.setValueAtTime(.001,st);
+        g.gain.exponentialRampToValueAtTime(.5,st+.03);
+        g.gain.exponentialRampToValueAtTime(.001,st+.3);
+        o.start(st);o.stop(st+.32);
+      });
+    }catch(e){}
+  };
+  beep();
+  ringTimer=setInterval(beep,1200);
+}
+function stopRing(){
+  if(ringTimer){clearInterval(ringTimer);ringTimer=null;}
+  if(ringCtx){try{ringCtx.close();}catch(e){} ringCtx=null;}
+}
 function showAlarm(msg){
-  const dot=$('#alarmDot');
-  dot.innerHTML=icon('clock')+' '+msg+'（点击关闭）';
-  dot.classList.add('show');
-  dot.onclick=()=>dot.classList.remove('show');
-  // 尝试系统通知
+  // 全屏强提醒弹窗
+  $('#alarmMsg').textContent=msg;
+  $('#alarmAlert').classList.add('show');
+  startRing();
+  // 尝试系统通知（配合响铃）
   try{
     if('Notification' in window && Notification.permission==='granted'){
       new Notification('奶茶炸洋芋 · 上班提醒',{body:msg});
     }
   }catch(e){}
-  // 声音
-  try{
-    const ac=new (window.AudioContext||window.webkitAudioContext)();
-    const o=ac.createOscillator(),g=ac.createGain();
-    o.connect(g);g.connect(ac.destination);o.frequency.value=880;
-    g.gain.setValueAtTime(.001,ac.currentTime);g.gain.exponentialRampToValueAtTime(.3,ac.currentTime+.02);
-    g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.6);
-    o.start();o.stop(ac.currentTime+.6);
-  }catch(e){}
+  // 震动（支持的手机）
+  try{ if(navigator.vibrate) navigator.vibrate([400,200,400,200,400]); }catch(e){}
 }
+function closeAlarm(){
+  stopRing();
+  $('#alarmAlert').classList.remove('show');
+  const dot=$('#alarmDot');
+  dot.classList.remove('show');
+}
+$('#alarmClose').onclick=()=>closeAlarm();
+// 稍后提醒：5 分钟后再响一次
+$('#alarmSnooze').onclick=()=>{
+  const msg=$('#alarmMsg').textContent;
+  closeAlarm();
+  setTimeout(()=>showAlarm(msg),5*60*1000);
+  toast('5 分钟后再提醒你');
+};
 setInterval(alarmLoop,15000);
 function requestNote(){
   try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();}catch(e){}
 }
 requestNote();
 // 测试闹钟
-$('#testAlarmBtn').onclick=()=>{showAlarm('这是一条测试提醒：模拟上班前15分钟，应用运行期间会准点弹窗');};
+$('#testAlarmBtn').onclick=()=>{showAlarm('这是一条测试提醒：模拟上班前15分钟，应用运行期间会准点响铃');};
 $('#exportSched').onclick=()=>{
   const rows=[['日期','时间段','项目组']];
   Object.keys(sched).sort().forEach(k=>{
