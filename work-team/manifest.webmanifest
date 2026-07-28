@@ -1,0 +1,17 @@
+{
+  "name": "奶茶炸洋芋 · 团队工作台",
+  "short_name": "团队工作台",
+  "description": "班表排班 + 发薪日智能计算，团队共享使用",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f2fb",
+  "theme_color": "#7d4aae",
+  "categories": ["productivity", "business"],
+  "icons": [
+    {"src":"iconflat.png?v=6","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"iconflat-512.png?v=6","sizes":"512x512","type":"image/png","purpose":"any"}
+  ]
+}
