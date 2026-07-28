@@ -66,7 +66,7 @@ mask.onclick=e=>{if(e.target===mask)closeModal();};
    1. 班表
    ===================================================================== */
 const SCH_KEY='schedule_v1';
-const PROJECTS=['项目组A·售后','项目组B·售前','项目组C·VIP','项目组D·投诉','机动支援'];
+const PROJECTS=['新花','老花'];
 let sched = DB.get(SCH_KEY,{});          // { 'YYYY-M-D' : { 9:{p:'项目组A'}, ... } }
 let viewY, viewM, selKey;
 
