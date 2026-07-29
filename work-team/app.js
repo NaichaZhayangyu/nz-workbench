@@ -113,6 +113,22 @@ function renderSlots(key){
     else{editingKey=key;}
     renderSlots(key);
   };
+  // 复制按钮：当天有班次才显示
+  const copyBtn=$('#copyDayBtn');
+  if(hours.length>0){
+    copyBtn.style.display='';
+    copyBtn.onclick=()=>copyDay(key,Y,M,D);
+  } else {
+    copyBtn.style.display='none';
+  }
+  // 粘贴按钮：剪贴板有已复制的班次才显示
+  const pasteBtn=$('#pasteDayBtn');
+  if(clipboard && clipboard.shifts.length){
+    pasteBtn.style.display='';
+    pasteBtn.onclick=()=>pasteDay(key,Y,M,D);
+  } else {
+    pasteBtn.style.display='none';
+  }
   const wrap=$('#slotList');
   if(editingKey===key){
     let html=`<div class="edit-bar"><span style="font-size:12.5px;color:var(--ink-soft)">点时段选择项目组 · 已排的时段点 ✕ 可删除</span></div>`;
@@ -133,7 +149,7 @@ function renderSlots(key){
     return;
   }
   if(hours.length===0){
-    wrap.innerHTML=`<div class="empty-tip">这一天还没排班<br><span style="font-size:13px;">点右上角「＋ 排班」开始安排</span></div>`;
+    wrap.innerHTML=`<div class="empty-tip">这一天还没排班<br><span style="font-size:13px;">点右上角「＋ 排班」开始安排，或点「📥 粘贴」套用复制的班次</span></div>`;
     return;
   }
   let html='';
@@ -159,6 +175,60 @@ function deleteShift(key,h){
     const aid=Y+'-'+M+'-'+D+'-'+h;
     alarms=alarms.filter(a=>a.id!==aid);saveAlarms();
     renderCalendar();renderSlots(key);toast('已删除「'+hourLabel(h)+' '+proj+'」班次');
+  }
+}
+
+/* ===== 复制 / 粘贴某天班表 ===== */
+// clipboard: {dateLabel, shifts:[{h, p}]}
+let clipboard = DB.get('clipboard_v1', null);
+function humanDayLabel(M,D){ return `${M}月${D}日`; }
+function copyDay(key,Y,M,D){
+  const day=sched[key]||{};
+  const hours=Object.keys(day).map(Number).sort((a,b)=>a-b);
+  if(!hours.length){toast('这一天没有班次可复制');return;}
+  const shifts=hours.map(h=>({h, p:day[h].p}));
+  clipboard={dateLabel:humanDayLabel(M,D), shifts};
+  DB.set('clipboard_v1',clipboard);
+  // 生成人读文本：如 【7月29日】11:00 老花 / 12:00 新花
+  const text=`【${humanDayLabel(M,D)}】`+shifts.map(s=>`${hourLabel(s.h)} ${s.p}`).join(' / ');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(
+      ()=>toast('已复制可分享文本：'+text),
+      ()=>toast('已复制（本应用内可用）：'+text)
+    );
+  } else {
+    toast('已复制：'+text);
+  }
+  renderSlots(key);
+}
+function pasteDay(key,Y,M,D){
+  if(!clipboard||!clipboard.shifts.length){toast('没有可粘贴的班次');return;}
+  const src=clipboard;
+  const exist=sched[key]?Object.keys(sched[key]).length:0;
+  const doPaste=(merge)=>{
+    sched[key]=sched[key]||{};
+    if(!merge) sched[key]={};
+    src.shifts.forEach(s=>{
+      sched[key][s.h]={p:s.p,t:Date.now()};
+      setAlarm(Y,M,D,s.h,s.p);
+    });
+    saveSched();
+    renderCalendar();renderSlots(key);
+    toast(`已粘贴 ${src.shifts.length} 个班次到 ${humanDayLabel(M,D)}（原${src.dateLabel}的安排）`);
+  };
+  if(exist>0){
+    openModal(`<h3>📥 粘贴班次</h3>
+      <div class="mdesc">把【${src.dateLabel}】的 ${src.shifts.length} 个班次套用到 ${humanDayLabel(M,D)}</div>
+      <div class="opt-grid" id="pm">
+        <div class="opt" data-m="merge">合并：保留原有班次</div>
+        <div class="opt sel" data-m="replace">覆盖：替换当天全部</div>
+      </div>
+      <div class="row"><button class="btn" id="doPaste">确认粘贴</button></div>`);
+    let mode='replace';
+    $$('#pm .opt').forEach(o=>o.onclick=()=>{mode=o.dataset.m;$$('#pm .opt').forEach(x=>x.classList.remove('sel'));o.classList.add('sel');});
+    $('#doPaste').onclick=()=>{closeModal();doPaste(mode==='merge');};
+  } else {
+    doPaste(false);
   }
 }
 
